@@ -40,3 +40,18 @@ Backend: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`. Móvi
 Build descarga Geist con `next/font/google` y requiere acceso a Google Fonts. La validación automática no sustituye prueba visual en Expo Go ni confirma escritura/lectura real del destino Neon.
 
 Prueba manual posterior, sólo cuando se autorice usar servicios reales: abrir Expo Go físico, iniciar sesión y comprobar preparación antes de consultas privadas; editar nombre/bio/favorito, recargar y comprobar persistencia; reintentar con API caída; cambiar A→B o salir durante sync/guardado y comprobar ausencia de callbacks, datos o notificaciones anteriores. No ejecutar migraciones ni cambiar el destino Neon.
+
+## Oraciones: activación pendiente
+
+La API `/api/v1/prayers` requiere Clerk; GET pagina de 100 en 100 (`cursor`, `nextCursor`, ID inmutable creciente), POST usa sólo amigos por defecto y admite pública si el autor la elige. PATCH/DELETE `/prayers/:id` exigen autor y PUT `/prayers/order` recibe `{ids: number[]}` con el conjunto propio completo, sin límite de cantidad de oraciones. Público significa lectores autenticados; amigos exige ambos follows actuales en SQL. Límites: contenido 10000 caracteres, título 200, cuerpo 32768 bytes salvo orden, cuyo límite de transporte es 65536 bytes. Cada página observa su propia instantánea SQL; no se garantiza una instantánea global entre páginas. El cliente reúne todas las páginas y ordena por position/id. Error de esquema/Neon: 503 recuperable.
+
+**PRAYERS_API_ENABLED=false por defecto.** Tras autenticar, todas las rutas devuelven 503 PRAYERS_NOT_ACTIVE sin consultar DB mientras el flag no sea exactamente true. Mantener desactivado hasta completar el corte legacy, revocar credenciales y resolver la idempotencia de creación (un reintento tras una respuesta perdida podría duplicar una oración). Sólo después de revisar esas condiciones establecer PRAYERS_API_ENABLED=true en el servidor.
+
+**No publicar hasta cortar el acceso PostgreSQL directo del bundle móvil y revocar/rotar sus credenciales.** Esta entrega no migra relaciones legacy ni garantiza privacidad integral mientras esas credenciales sigan vigentes.
+
+En una ventana revisada, respaldar `prayers`, detener escritores legacy, revisar y aplicar manualmente `migrations/20261020_prayers_audience.sql` al destino correcto. No se ejecuta al arrancar. Verificar `SELECT audience, count(*) FROM prayers GROUP BY audience` (todas friends inicialmente), constraint y default en catálogo; comparar contenido, colores, fechas y posiciones con respaldo. Probar con dos cuentas: propias completas, extraños sólo públicas, mutuos públicas+friends, revocación de follow inmediata; CRUD ajeno 404 y orden inválido sin cambios. Antes de activar el flag, completar el retiro de credenciales directas y la idempotencia de creación; sólo después habilitar los clientes API. Expo real y aplicación de migración quedan pendientes.
+
+Rollback: detener clientes API; exportar `id,audience` para preservar decisiones de visibilidad, volver al release previo sólo si no se reabre lectura legacy que exponga datos, y ejecutar manualmente `ALTER TABLE prayers DROP CONSTRAINT prayers_audience_check; ALTER TABLE prayers DROP COLUMN audience;`. No restaurar acceso directo ni publicar el cliente previo sin evaluar privacidad. La columna es aditiva: preferir rollback de código conservándola.
+
+
+Las pruebas PGlite ejecutan la migración y SQL de política/orden reales sólo sobre PostgreSQL embebido en memoria. No sustituyen concurrencia multiconexión ni verificación del destino Neon real; ambas comprobaciones continúan pendientes de activación.

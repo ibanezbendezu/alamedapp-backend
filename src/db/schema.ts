@@ -1,4 +1,5 @@
-import { pgTable, varchar, decimal, integer, timestamp, boolean, primaryKey, pgEnum, text } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { pgTable, varchar, decimal, integer, timestamp, boolean, primaryKey, pgEnum, text, check } from 'drizzle-orm/pg-core';
 
 export const streakStatusEnum = pgEnum('streak_status', ['pending', 'accepted', 'rejected']);
 export const transactionTypeEnum = pgEnum('transaction_type', ['in', 'out']);
@@ -90,6 +91,7 @@ export const transactions = pgTable('transactions', {
 });
 
 export const prayers = pgTable('prayers', {
+  audience: varchar('audience', { length: 10 }).$type<'friends' | 'public'>().default('friends').notNull(),
   id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
   userId: varchar('user_id', { length: 255 }).references(() => users.clerkId, { onDelete: 'cascade' }).notNull(),
   title: text('title'),
@@ -99,4 +101,4 @@ export const prayers = pgTable('prayers', {
   isAnswered: boolean('is_answered').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (t) => [check('prayers_audience_check', sql`${t.audience} in ('friends', 'public')`)]);

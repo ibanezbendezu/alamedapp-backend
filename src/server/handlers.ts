@@ -6,16 +6,15 @@ import { apiHandler, HttpError, withTimeout } from './http.ts';
 import { findOwnProfile, profileDto, patchOwnProfile, validateProfilePatch, findMedals } from './profile.ts';
 import { accountTimeoutMs, syncOwnAccount } from './account.ts';
 
-async function databaseOperation<T>(operation: () => Promise<T>, timeoutMs = databaseEnvironment().timeoutMs): Promise<T> {
-  try { return await withTimeout(operation, timeoutMs); }
+export async function databaseOperation<T>(operation: () => Promise<T>, timeoutMs?: number): Promise<T> {
+  try { return await withTimeout(operation, timeoutMs ?? databaseEnvironment().timeoutMs); }
   catch (error) {
     if (error instanceof HttpError) throw error;
     throw new HttpError(503, 'DATABASE_UNAVAILABLE', 'Servicio temporalmente no disponible.');
   }
 }
 
-async function readBody(request: Request) {
-  const limit = 32768;
+export async function readBody(request: Request, limit = 32768) {
   const tooLarge = () => new HttpError(413, 'BODY_TOO_LARGE', 'La solicitud es demasiado grande.');
   if (Number(request.headers.get('content-length')) > limit) throw tooLarge();
   if (!request.body) return '';
