@@ -5,7 +5,7 @@ import { databaseEnvironment } from '../server/environment.ts';
 
 function createDatabase() {
   const { url, timeoutMs } = databaseEnvironment();
-  const sql = neon(url, { fetchOptions: {
+  const sql = neon(url, { isolationLevel: 'ReadCommitted', fetchOptions: {
     // Neon combina estas opciones en cada fetch; no reutilizar señales vencidas.
     get signal() { return AbortSignal.timeout(timeoutMs); },
     cache: 'no-store',

@@ -17,7 +17,7 @@ export function responseHeaders(request: Request, requestId: string) {
   if (origin && allowedOrigins().includes(origin)) {
     headers.set('Access-Control-Allow-Origin', origin);
     headers.set('Access-Control-Allow-Methods', corsMethods);
-    headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key');
     headers.set('Access-Control-Expose-Headers', 'X-Request-Id');
   }
   return headers;

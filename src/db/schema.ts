@@ -102,3 +102,11 @@ export const prayers = pgTable('prayers', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [check('prayers_audience_check', sql`${t.audience} in ('friends', 'public')`)]);
+
+// Deliberately no prayer FK: the durable receipt survives deletion of its prayer.
+export const prayerCreationRequests = pgTable('prayer_creation_requests', {
+  userId: varchar('user_id', { length: 255 }).references(() => users.clerkId, { onDelete: 'cascade' }).notNull(),
+  key: varchar('key', { length: 36 }).notNull(),
+  fingerprint: varchar('fingerprint', { length: 64 }).notNull(),
+  prayerId: integer('prayer_id'),
+}, t => [primaryKey({ columns: [t.userId, t.key] })]);

@@ -4,6 +4,7 @@ import { prayers } from '../db/schema.ts';
 import { requireSubject } from './auth.ts';
 import { apiHandler, HttpError } from './http.ts';
 import { databaseOperation, readBody } from './handlers.ts';
+import { creationKey, createPrayerOnce, normalizeCreation } from './prayerCreation.ts';
 
 export type PrayerChanges = { title?: string | null; content?: string; color?: string; isAnswered?: boolean; audience?: 'friends' | 'public' };
 const invalid = () => new HttpError(400, 'INVALID_PRAYER', 'Datos de oración no válidos.');
@@ -48,9 +49,7 @@ export async function listPrayers(subject: string, owner: string, cursor: number
   return listPrayersQuery(subject, owner, cursor);
 }
 export async function insertPrayer(subject: string, changes: PrayerChanges) {
-  const rows = await getDb().insert(prayers).values({ userId: subject, content: changes.content!,
-    title: changes.title ?? null, color: changes.color ?? 'default', audience: changes.audience ?? 'friends',
-    isAnswered: changes.isAnswered ?? false,
+  const rows = await getDb().insert(prayers).values({ userId: subject, ...normalizeCreation(changes),
     position: sql`(select coalesce(max(position), -1) + 1 from prayers where user_id = ${subject})`,
   }).returning();
   return rows[0];
@@ -79,7 +78,7 @@ export async function orderPrayers(subject: string, ids: number[]) {
   const result = await getDb().execute(orderStatement(subject, ids));
   return result.rows[0]?.ok === true;
 }
-const repository = { list: listPrayers, insert: insertPrayer, patch: patchPrayer, remove: removePrayer, order: orderPrayers };
+const repository = { list: listPrayers, insert: createPrayerOnce, patch: patchPrayer, remove: removePrayer, order: orderPrayers };
 export function createPrayersHandler(action: 'list' | 'create' | 'patch' | 'delete' | 'order',
   target?: string, authenticate = requireSubject, repo = repository) {
   return apiHandler(async request => {
@@ -107,7 +106,8 @@ export function createPrayersHandler(action: 'list' | 'create' | 'patch' | 'dele
     else {
       let value; try { value = JSON.parse(await readBody(request)); } catch (e) { if (e instanceof HttpError) throw e; throw invalid(); }
       const changes = validatePrayer(value, action === 'create');
-      row = await databaseOperation(() => action === 'create' ? repo.insert(subject, changes) : repo.patch(subject, id!, changes));
+      const key = action === 'create' ? creationKey(request.headers.get('Idempotency-Key')) : undefined;
+      row = await databaseOperation(() => action === 'create' ? repo.insert(subject, changes, key!) : repo.patch(subject, id!, changes));
     }
     if (!row) throw new HttpError(404, 'PRAYER_NOT_FOUND', 'Oración no encontrada.');
     return { data: prayerDto(row) };
