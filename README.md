@@ -1,37 +1,42 @@
-# Alamedapp API — base Expo, Clerk y Neon
+# Alamedapp API — perfil propio y sincronización
 
-Requiere Node 24 y npm. Mantiene Next.js, Drizzle y el driver HTTP de Neon instalados.
+Requiere Node 24 y npm. Usa Next.js, Clerk servidor, Drizzle y Neon HTTP. No requiere Docker ni migraciones.
 
-## Instalación y configuración
+## Configuración
 
-1. Ejecutar `npm ci` en este repositorio.
-2. Crear manualmente `.env.local` usando `.env.example` como guía. No copiar archivos `.env` del móvil ni de otros proyectos.
-3. Configurar `DATABASE_URL` privada con el destino Neon actual y `sslmode=require` o `verify-full`. Sólo se admiten hosts `*.neon.tech`. No definir esta conexión como variable pública ni mediante `next.config`.
-4. Configurar `CLERK_SECRET_KEY` o `CLERK_JWT_KEY` (PEM pública para verificación sin consulta JWKS) de la misma instancia Clerk del móvil. `CLERK_AUTHORIZED_PARTIES` es una lista separada por comas con los valores `azp` legítimos de la app. Es obligatoria. En sesiones nativas Clerk puede omitir `azp`; si está presente debe coincidir con esa lista.
-5. `API_ALLOWED_ORIGINS` contiene orígenes exactos separados por comas para Expo web. No usar comodines. CORS permite Authorization, expone X-Request-Id y declara GET, HEAD, POST, PUT, PATCH, DELETE y OPTIONS; sólo los handlers documentados existen.
-6. `DATABASE_TIMEOUT_MS` limita cada fetch Neon (por defecto 5000, máximo 30000). La conexión se inicializa al usarla; importar rutas o compilar no consulta PostgreSQL.
-7. Ejecutar `npm run dev -- --hostname 0.0.0.0`.
+1. Ejecutar `npm ci` en backend y móvil.
+2. Crear manualmente `.env.local` a partir de los ejemplos, sin copiar secretos entre proyectos.
+3. Backend: `DATABASE_URL` privada debe apuntar al mismo destino Neon usado por `EXPO_PUBLIC_DATABASE_URL` de los módulos legacy. Sólo admite hosts `*.neon.tech` con `sslmode=require` o `verify-full`.
+4. `CLERK_SECRET_KEY` es obligatoria para sincronizar metadata desde Clerk. `CLERK_JWT_KEY` (PEM pública opcional) permite verificar tokens localmente, pero no reemplaza secretKey para sync. Ambos proyectos deben usar la misma instancia Clerk.
+5. `CLERK_AUTHORIZED_PARTIES` es obligatoria: lista separada por comas de valores `azp` permitidos. Clerk nativo puede omitir `azp`; si existe, debe coincidir. `API_ALLOWED_ORIGINS` contiene orígenes exactos para Expo web, sin comodines.
+6. `DATABASE_TIMEOUT_MS` limita cada fetch Neon (5000 por defecto, máximo 30000). Clerk tiene timeout de 5000 ms; el presupuesto total de sync suma Clerk y hasta tres operaciones Neon (alta, eventual fallback y catálogo). El cliente espera hasta 30 segundos para sync y 10 para otras rutas; si se aumenta el presupuesto del servidor, ajustar también `timeoutMs` del cliente. Importar rutas o compilar no consulta Neon.
+7. Ejecutar backend con `npm run dev -- --hostname 0.0.0.0`.
+8. Expo requiere `EXPO_PUBLIC_API_URL`. En Expo Go de teléfono físico usar `http://IP_LAN_DEL_COMPUTADOR:3000`; localhost apunta al teléfono. El teléfono y computador deben compartir una red alcanzable, con el puerto permitido. Reiniciar Expo tras cambiar variables; producción requiere HTTPS.
 
-En Expo configurar `EXPO_PUBLIC_API_URL=http://IP_LAN_DEL_EQUIPO:3000` para un teléfono físico: localhost apunta al teléfono. Permitir el puerto local en la red de desarrollo. Para producción usar HTTPS. La URL pública de la API no contiene credenciales. El hook `useApiClient` obtiene un token Clerk actual en cada petición; `client.getMe({signal})` admite cancelación y timeout de token, red y lectura de cuerpo.
+## Contrato
 
-## Contrato de lectura
+Todas las rutas privadas exigen sesión Clerk válida mediante `Authorization: Bearer TOKEN` antes de leer Clerk o Neon. La identidad procede exclusivamente del token; query strings no cambian el sujeto.
 
-- `GET /api/health`: 200 `{status:"ok"}`, liveness independiente de DB y Clerk.
-- `GET /api/ready`: ejecuta `select 1` con timeout; 200 `{status:"ready"}` o 503 con error genérico. No devuelve host ni detalles de conexión.
-- `GET /api/v1/me`: exige `Authorization: Bearer TOKEN`. Verifica firma y vigencia Clerk antes de consultar DB; acepta sólo sesión de usuario (sub y sid), excluye sesión pendiente. Ignora identidades en query. Devuelve 200 `{data:{clerkId,username,email,displayName,avatarUrl,balance,followerCount,followingCount,favoriteVerse,bio,cardColor,createdAt}}`; createdAt es ISO y balance es decimal serializado como string. Selección y DTO explícitos excluyen securityPin.
-- Sin sesión válida: 401. Sin fila local: 404; no crea ni modifica cuentas. Fallo de conexión o configuración DB: 503. Configuración de autenticación incompleta u otro fallo interno: 500 genérico.
-- Errores JSON: `{error:{code,message,requestId}}`. Todas las respuestas de estos handlers usan `Cache-Control: no-store` y `X-Request-Id`; OPTIONS devuelve 204 con la misma política CORS.
+- `GET /api/health`: liveness, independiente de dependencias.
+- `GET /api/ready`: `select 1`, 200 o 503 seguro.
+- `POST /api/v1/me/sync`: cuerpo vacío o `{}`. Obtiene metadata en Clerk servidor y exige correo primario verificado. Alta idempotente por clerkId; colisión de username intenta sufijo determinista. En cuentas existentes actualiza sólo email y avatar, preservando username, nombre local, saldo, PIN, bio, favorito, fechas y contadores. Inicializa el catálogo legacy sin asignar medallas. Correo sin verificar o conflicto irresoluble: 409.
+- `GET /api/v1/me`: perfil propio, 404 si falta.
+- `PATCH /api/v1/me`: sólo `displayName` (50), `bio` (160), `favoriteVerse` (5000), todos admiten null. Favorito es string JSON BibleVerse con book/text no vacíos y chapter/verse enteros positivos. Cuerpo vacío, JSON inválido, campos extra, tipos o límites inválidos: 400. Sync y PATCH limitan la lectura del cuerpo a 32 KiB; exceso: 413. No admite identidad, saldo, PIN ni privilegios.
+- `GET /api/v1/me/medals`: medallas propias con earnedAt ISO.
+- `GET /api/v1/medals`: catálogo autenticado. No existen rutas de asignación.
 
-## Transición pendiente
+Perfil devuelve `{data:{clerkId,username,email,displayName,avatarUrl,balance,followerCount,followingCount,favoriteVerse,bio,cardColor,createdAt}}`. Balance es decimal string, fecha ISO; selección y DTO excluyen PIN. Errores: `{error:{code,message,requestId}}`; fallos de dependencias devuelven 503 seguro. Respuestas no cacheables, correlación `X-Request-Id`, OPTIONS/CORS explícito. Logs de fallos incluyen sólo categoría, estado y correlación.
 
-Esta entrega prepara la API y el cliente HTTP; **no completa la separación**. El móvil conserva su sync, polling, consultas y configuración de destino actuales. El nuevo hook no está montado en el árbol legacy y no se aprovisionan cuentas desde la API. Mantener `DATABASE_URL` del backend apuntando al mismo destino de datos cuando se configure para lectura.
+## Cuenta en Expo y transición legacy
 
-Las consultas legacy del backend siguen disponibles como funciones internas, sin exponerse por RPC. El PIN legacy y la credencial pública del bundle móvil se resolverán al migrar todos sus consumidores y rotar credenciales durante el corte. No cambiar el destino de una parte de los usuarios ni habilitar transferencias mediante esta base. No se agregan Docker ni migraciones remotas.
+El provider prepara la cuenta antes de montar navegación privada y notificaciones. Muestra estado pendiente, error recuperable, reintentar y salir. Cada sesión Clerk tiene QueryClient propio; al cambiar cuenta o cerrar sesión invalida la sesión anterior, cancela y descarta sus respuestas, vacía caché y desmonta notificaciones. Edición de nombre/bio/favorito y lectura de perfil/medallas usan API sin fallback SQL; callbacks y navegación ocurren sólo tras guardar con la sesión vigente.
 
-## Verificación sin infraestructura
+Follow-back, rachas, notificaciones, búsqueda y perfiles ajenos, ALMC y oraciones siguen en PostgreSQL legacy. La credencial pública actual continúa siendo necesaria para estos consumidores hasta su migración y rotación. No se cambian privacidad ajena, esquema ni política PIN/ALMC.
 
-En backend: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`. En móvil: `npm run typecheck` y `npm test`. Las pruebas usan el runner TypeScript nativo de Node 24, sin nuevas dependencias. Generan claves RSA de fixture, verifican Clerk localmente y reemplazan el transporte HTTP Neon; no cargan `.env`, no contactan Neon ni escriben datos. La prueba del driver observa SQL parametrizado, ausencia del PIN y cancelación del fetch con una señal nueva por consulta. Readiness se cubre con dobles disponibles, fallidos y bloqueados.
+## Verificación local y prueba manual
 
-La página inicial existente descarga Geist durante build con `next/font/google`; requiere acceso de red a Google Fonts. Los handlers API son dinámicos y no requieren claves reales durante build.
+Backend: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`. Móvil: `npm test`, `npm run typecheck`. Runner TypeScript nativo Node24 sin dependencias nuevas. Clerk SDK/token RSA y transporte Neon se simulan; se verifica SQL real generado, whitelist, conflictos, preservación local, lectura de medallas, timeout, cancelación y carreras A/B. Además de los controladores puros, las pruebas montan AccountProvider y los hooks reales con react-test-renderer ya instalado, Clerk y hosts nativos controlados: verifican gate, polling, retry, StrictMode, cambios de identidad e invalidación observada. Las pruebas no cargan archivos de entorno ni contactan Clerk/Neon reales.
 
-Para un smoke manual posterior, configurar las variables en forma privada y consultar primero health y ready; luego enviar un token de sesión propio a `/api/v1/me`. Comparar el clerkId con el sujeto autenticado y comprobar que no exista securityPin; repetir sin Authorization (401), con un userId ajeno en query (sigue devolviendo el propio) y con sesión de fixture sin fila (404). No ejecutar migraciones ni operaciones de escritura. Estas instrucciones no implican que se haya verificado una conexión real.
+Build descarga Geist con `next/font/google` y requiere acceso a Google Fonts. La validación automática no sustituye prueba visual en Expo Go ni confirma escritura/lectura real del destino Neon.
+
+Prueba manual posterior, sólo cuando se autorice usar servicios reales: abrir Expo Go físico, iniciar sesión y comprobar preparación antes de consultas privadas; editar nombre/bio/favorito, recargar y comprobar persistencia; reintentar con API caída; cambiar A→B o salir durante sync/guardado y comprobar ausencia de callbacks, datos o notificaciones anteriores. No ejecutar migraciones ni cambiar el destino Neon.
