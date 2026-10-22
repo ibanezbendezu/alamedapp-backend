@@ -1,6 +1,8 @@
 # Alamedapp API
 
-Node 24, Next.js 16.4.2, Clerk, Drizzle y Neon HTTP. No Docker ni migraciones al arrancar. El código local está preparado para el corte; las migraciones, rotación, dispositivo y verificación remota se ejecutan posteriormente bajo el procedimiento revisado.
+Node 24, Next.js 16.4.2, Clerk, Drizzle y Neon HTTP. No Docker ni migraciones al arrancar. El corte de Neon y la rotación de credenciales se completaron el 22 de octubre de 2026; evidencia en `../docs/corte-operativo-neon.md`. La validación en teléfono y el despliegue público siguen pendientes.
+
+Desde la raíz del workspace, `.\dev.cmd` inicia ambos proyectos; `.\dev.cmd --phone IP_LAN` prepara Expo Go. Ctrl+C detiene ambos. Consulta `../README.md`.
 
 ## Arranque
 
@@ -29,7 +31,7 @@ Las rutas anteriores llevan prefijo /api/v1; community se conserva en cada opera
 
 Oraciones mantienen GET /users/:id/prayers, POST /prayers con UUIDv4, PATCH/DELETE /prayers/:id y PUT /prayers/order. Autor en escrituras, lectores autenticados; friends exige follows mutuos vigentes. GET pagina por ID y el cliente ordena position/id; público significa autenticados. Recibo de creación conserva ID incluso tras borrado (410), payload distinto 409. PRAYERS_API_ENABLED sigue false hasta el corte revisado; auth ocurre antes del gate y no hay consultas con flag apagado.
 
-## Migraciones y corte pendiente
+## Procedimiento de migraciones y corte
 
 Orden manual exacto, después de respaldo y detención de escritores antiguos:
 

@@ -121,7 +121,7 @@ export async function communityOperation(a: string, op: string, body: Row, param
         return { ...account, transactions: items, nextCursor: items.length === 50 ? items[49].id : null };
     }
     if (op === 'card-color') {
-        if (typeof body.color !== 'string' || !/^#[a-f\d]{6}$/i.test(body.color))
+        if (typeof body.color !== 'string' || (!/^#[a-f\d]{6}$/i.test(body.color) && !['slate','blue','green','red','purple','amber'].includes(body.color)))
             throw new HttpError(400, 'INVALID_COLOR', 'Color inválido.');
         await rows(sql `update users set card_color=${body.color} where clerk_id=${a} returning clerk_id`);
         return { ok: true };

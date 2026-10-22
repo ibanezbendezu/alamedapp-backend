@@ -229,6 +229,19 @@ test('production SQL: ownership, PIN lockout, atomic money, receipts, rollback, 
         assert.notEqual(replacement,hash);assert.equal(await matchesPin('752013',replacement),true);
         await assert.rejects(call('A','transfer',transfer,{},'52345678-1234-4234-8234-123456789abc'),{code:'INVALID_PIN'});
         assert.equal((await pg.query<{data:{error:string}}>("select api_transfer('A','B',0.01,'old credential','62345678-1234-4234-8234-123456789abc','old',$1) data",[hash])).rows[0].data.error,'PIN_CHANGED');
+        // Preserve stored legacy identifiers and exact hex strings; no migration/normalization.
+        for(const color of ['slate','blue','green','red','purple','amber','#12aBcD']){
+            await pg.query("update users set card_color=$1 where clerk_id='A'",[color]);
+            assert.equal((await call('A','wallet') as {cardColor:string}).cardColor,color);
+            await call('A','card-color',{color});
+            assert.equal((await pg.query<{card_color:string}>("select card_color from users where clerk_id='A'")).rows[0].card_color,color);
+            assert.equal((await pg.query<{card_color:string}>("select card_color from users where clerk_id='B'")).rows[0].card_color,'#1A1A1A');
+        }
+        for(const color of ['Slate','BLUE','orange',' blue ','#abc','#12345678','rgb(0,0,0)','__proto__',null,4]){
+            const beforeInvalid=await snapshot();
+            await assert.rejects(call('A','card-color',{color}),{status:400,code:'INVALID_COLOR'});
+            assert.deepEqual(await snapshot(),beforeInvalid);
+        }
     }
     finally {
         neonConfig.fetchFunction = old;
