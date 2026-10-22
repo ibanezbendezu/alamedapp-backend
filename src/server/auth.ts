@@ -9,7 +9,7 @@ type Claims = { sub?: string; sid?: string; azp?: string; sts?: string };
 export type TokenVerifier = (token: string, options: ReturnType<typeof authEnvironment>) => Promise<Claims | undefined>;
 const verifySession: TokenVerifier = async (token, options) => {
   // La misma entrada CJS de Node se usa en producción y en las pruebas locales.
-  const { verifyToken } = loadClerk('@clerk/nextjs/server') as typeof import('@clerk/nextjs/server');
+  const { verifyToken } = loadClerk('@clerk/backend') as typeof import('@clerk/backend');
   const result = await verifyToken(token, options);
   return result as Claims;
 };

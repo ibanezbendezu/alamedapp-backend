@@ -1,0 +1,17 @@
+import { createCommunityHandler } from './community.ts';
+import { createMeHandler, createPatchMeHandler, createMedalsHandler, createReadyHandler, createSyncHandler, healthHandler } from './handlers.ts';
+import { createPrayersHandler } from './prayers.ts';
+export const me = createMeHandler();
+export const patchMe = createPatchMeHandler();
+export const sync = createSyncHandler();
+export const ownMedals = createMedalsHandler(true);
+export const medals = createMedalsHandler(false);
+export const ready = createReadyHandler();
+export const health = healthHandler;
+export const prayers = createPrayersHandler('list');
+export const createPrayer = createPrayersHandler('create');
+export const orderPrayers = createPrayersHandler('order');
+export const userPrayers = (request: Request, context: {params: Promise<{id: string}>}) => context.params.then(({id}) => createPrayersHandler('list', id)(request));
+export const patchPrayer = (request: Request, context: {params: Promise<{id: string}>}) => context.params.then(({id}) => createPrayersHandler('patch', id)(request));
+export const deletePrayer = (request: Request, context: {params: Promise<{id: string}>}) => context.params.then(({id}) => createPrayersHandler('delete', id)(request));
+export const community = (request: Request, operation: string) => createCommunityHandler(operation)(request);

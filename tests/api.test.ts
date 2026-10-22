@@ -7,9 +7,8 @@ import { apiHandler, HttpError } from '../src/server/http.ts';
 import { createMeHandler, createReadyHandler } from '../src/server/handlers.ts';
 import { databaseEnvironment } from '../src/server/environment.ts';
 import { findOwnProfile, profileSelection } from '../src/server/profile.ts';
-import { GET as me, OPTIONS } from '../src/app/api/v1/me/route.ts';
-import { GET as health } from '../src/app/api/health/route.ts';
-import { GET as ready } from '../src/app/api/ready/route.ts';
+import { me, health, ready } from '../src/server/routes.ts';
+import { preflight as OPTIONS } from '../src/server/http.ts';
 
 // Se elimina configuración heredada: ningún test carga archivos .env.
 delete process.env.DATABASE_URL;

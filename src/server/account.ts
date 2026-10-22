@@ -17,7 +17,7 @@ export async function readClerkAccount(subject: string): Promise<ProviderUser> {
   const secretKey = process.env.CLERK_SECRET_KEY;
   if (!secretKey) throw new HttpError(503, 'ACCOUNT_UNAVAILABLE', 'Servicio temporalmente no disponible.');
   try {
-    const { createClerkClient } = loadClerk('@clerk/nextjs/server') as typeof import('@clerk/nextjs/server');
+    const { createClerkClient } = loadClerk('@clerk/backend') as typeof import('@clerk/backend');
     return await withTimeout(() => createClerkClient({ secretKey }).users.getUser(subject), accountTimeoutMs);
   } catch { throw new HttpError(503, 'ACCOUNT_UNAVAILABLE', 'Servicio temporalmente no disponible.'); }
 }

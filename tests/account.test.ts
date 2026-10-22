@@ -5,10 +5,7 @@ import { neonConfig } from '@neondatabase/serverless';
 import { syncOwnAccount, readClerkAccount, accountTimeoutMs } from '../src/server/account.ts';
 import { profileSelection, validateProfilePatch } from '../src/server/profile.ts';
 import { createSyncHandler, createPatchMeHandler, createMedalsHandler } from '../src/server/handlers.ts';
-import { POST } from '../src/app/api/v1/me/sync/route.ts';
-import { PATCH } from '../src/app/api/v1/me/route.ts';
-import { GET as ownMedals } from '../src/app/api/v1/me/medals/route.ts';
-import { GET as catalog } from '../src/app/api/v1/medals/route.ts';
+import { sync as POST, patchMe as PATCH, ownMedals, medals as catalog } from '../src/server/routes.ts';
 
 process.env.DATABASE_URL = 'postgresql://u:p@ep-fixture.us-east-2.aws.neon.tech/db?sslmode=require';
 process.env.CLERK_AUTHORIZED_PARTIES = 'http://localhost:8081';

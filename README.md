@@ -1,6 +1,6 @@
 # Alamedapp API
 
-Node 24, Next.js 16.4.2, Clerk, Drizzle y Neon HTTP. No Docker ni migraciones al arrancar. El corte de Neon y la rotación de credenciales se completaron el 22 de octubre de 2026; evidencia en `../docs/corte-operativo-neon.md`. La validación en teléfono y el despliegue público siguen pendientes.
+Node 24, NestJS 11, Clerk, Drizzle y Neon HTTP. No Docker ni migraciones al arrancar. El corte de Neon y la rotación de credenciales se completaron el 22 de octubre de 2026; evidencia en `../docs/corte-operativo-neon.md`. La validación en teléfono y el despliegue público siguen pendientes.
 
 Desde la raíz del workspace, `.\dev.cmd` inicia ambos proyectos; `.\dev.cmd --phone IP_LAN` prepara Expo Go. Ctrl+C detiene ambos. Consulta `../README.md`.
 
@@ -8,7 +8,9 @@ Desde la raíz del workspace, `.\dev.cmd` inicia ambos proyectos; `.\dev.cmd --p
 
 Ejecutar `npm ci` en ambos proyectos. Crear backend `.env.local` desde `.env.example`; los secretos y DATABASE_URL sólo pertenecen al servidor. La URL acepta Neon con sslmode=require/verify-full. Ambos proyectos usan la misma instancia Clerk. CLERK_SECRET_KEY sirve para sincronizar metadata; CLERK_JWT_KEY opcional es la clave pública PEM de verificación, nunca una clave privada. CLERK_AUTHORIZED_PARTIES y API_ALLOWED_ORIGINS son listas de orígenes exactos; agregar el origen Expo web LAN al probar desde otro computador.
 
-Backend: `npm run dev -- --hostname 0.0.0.0`. Expo web usa EXPO_PUBLIC_API_URL=http://localhost:3000. Expo Go físico usa http://IP_LAN_DEL_COMPUTADOR:3000; teléfono y computador comparten red y el puerto debe estar accesible. Reiniciar Metro tras cambiar variables. Producción requiere HTTPS. Si aparece NETWORK_ERROR, comprobar que Next esté escuchando y que la URL no apunte al propio teléfono.
+Backend: `npm run dev -- --hostname 0.0.0.0`. Expo web usa EXPO_PUBLIC_API_URL=http://localhost:3000. Expo Go físico usa http://IP_LAN_DEL_COMPUTADOR:3000; teléfono y computador comparten red y el puerto debe estar accesible. Reiniciar Metro tras cambiar variables. Producción requiere HTTPS. Si aparece NETWORK_ERROR, comprobar que Nest esté escuchando y que la URL no apunte al propio teléfono.
+
+Desarrollo con recarga: `npm run dev`. Producción: `npm run build` y `npm start` (Node 24, puerto 3000). `--hostname` y `--port` permiten cambiar la escucha. El proceso carga `.env.local` antes de `.env`, relativos al backend; las variables ya definidas en el proceso tienen prioridad. Compilar no carga esos archivos ni consulta servicios. Nest conserva los handlers Fetch con el parser de cuerpo desactivado y un adaptador de streaming de 32768 bytes.
 
 DATABASE_TIMEOUT_MS limita cada petición Neon, 5000 ms por defecto; sync permite su presupuesto de Clerk más tres operaciones DB. El resto del cliente tiene timeout de 10 segundos y conserva intentos económicos inciertos.
 
@@ -47,7 +49,7 @@ Rollback antes de COMMIT: ROLLBACK conserva datos originales. Tras aplicación: 
 
 ## Verificación
 
-`npm test`, `npm run typecheck`, `npm run lint`, `npm run build`. Los tests no leen .env ni acceden a servicios reales. PGlite ejecuta migraciones y SQL de producción: preflight, preservación, ownership, exactitud, lockout, replay/conflicto y fallos después de débito/crédito/asientos/aviso/recibo con rollback completo. PGlite serializa conexiones y no certifica contención MVCC real.
+`npm test`, `npm run typecheck`, `npm run lint`, `npm run build`. Los tests compilan y prueban también el HTTP real de Nest en un puerto local efímero: rutas, CORS, auth previa a cuerpo/DB, errores seguros, parámetros y límite chunked de 32768 bytes. No leen .env ni acceden a servicios reales. PGlite ejecuta migraciones y SQL de producción: preflight, preservación, ownership, exactitud, lockout, replay/conflicto y fallos después de débito/crédito/asientos/aviso/recibo con rollback completo. PGlite serializa conexiones y no certifica contención MVCC real.
 
 Opt-in EXCLUSIVAMENTE contra una base Neon desechable VACÍA: configurar NEON_ISOLATED_TEST_URL distinta de DATABASE_URL y NEON_ISOLATED_TEST_CONFIRM=EMPTY_DISPOSABLE_DATABASE, luego `npm run test:neon:isolated`. El script rehúsa bases con tablas, crea un esquema aleatorio, ejecuta fixtures/migración y pruebas multiconexión de replay/sobregiro/follows/PIN y presencia que espera un lock más de cinco segundos; elimina sólo el esquema generado. Nunca forma parte de npm test, nunca usar la base de la aplicación. No se ejecutó automáticamente.
 

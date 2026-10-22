@@ -118,12 +118,9 @@ test('real Drizzle/Neon transport generates bounded reads, owned writes and one 
 });
 
 
-test('default Next prayer routes verify real local RSA token and pass awaited path params to SQL', async () => {
+test('default neutral prayer routes verify real local RSA token and pass awaited path params to SQL', async () => {
   const { generateKeyPairSync, sign } = await import('node:crypto');
-  const { GET: ownGET, POST } = await import('../src/app/api/v1/prayers/route.ts');
-  const { GET: userGET } = await import('../src/app/api/v1/users/[id]/prayers/route.ts');
-  const { PATCH, DELETE } = await import('../src/app/api/v1/prayers/[id]/route.ts');
-  const { PUT } = await import('../src/app/api/v1/prayers/order/route.ts');
+  const { prayers: ownGET, createPrayer: POST, userPrayers: userGET, patchPrayer: PATCH, deletePrayer: DELETE, orderPrayers: PUT } = await import('../src/server/routes.ts');
   const { publicKey, privateKey } = generateKeyPairSync('rsa',{modulusLength:2048});
   process.env.CLERK_JWT_KEY=publicKey.export({type:'spki',format:'pem'}).toString();
   process.env.CLERK_AUTHORIZED_PARTIES='http://localhost:8081';
