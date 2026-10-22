@@ -1,6 +1,7 @@
 import { config } from 'dotenv';
 import { fileURLToPath } from 'node:url';
-import { createApplication } from './app.ts';
+import { createApplication, declaredRoutes } from './app.ts';
+
 
 // Process overrides win; .env.local wins over .env, independently of launch cwd.
 config({path: fileURLToPath(new URL('../.env.local', import.meta.url)), quiet: true});
@@ -14,3 +15,5 @@ const app = await createApplication();
 app.enableShutdownHooks();
 await app.listen(port, host);
 console.log(`Nest API listening on http://${host}:${port}`);
+console.log('Rutas disponibles:');
+for (const entry of declaredRoutes()) console.log(`  ${entry.method.padEnd(7)} ${entry.path}`);

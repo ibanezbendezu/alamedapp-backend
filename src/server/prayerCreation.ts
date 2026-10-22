@@ -21,8 +21,8 @@ export function creationFingerprint(changes: PrayerChanges) {
   return createHash('sha256').update(JSON.stringify(normalizeCreation(changes))).digest('hex');
 }
 
-export async function createPrayerOnce(subject: string, changes: PrayerChanges, key: string) {
-  const db = getDb();
+export async function createPrayerOnce(subject: string, changes: PrayerChanges, key: string, database = getDb) {
+  const db = database();
   const value = normalizeCreation(changes);
   const fingerprint = creationFingerprint(changes);
   const owned = and(eq(receipts.userId, subject), eq(receipts.key, key));

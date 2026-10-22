@@ -12,8 +12,8 @@ export const profileSelection = {
   createdAt: users.createdAt,
 };
 export type Profile = Pick<typeof users.$inferSelect, keyof typeof profileSelection>;
-export async function findOwnProfile(subject: string): Promise<Profile | undefined> {
-  const rows = await getDb().select(profileSelection).from(users).where(eq(users.clerkId, subject)).limit(1);
+export async function findOwnProfile(subject: string, database = getDb): Promise<Profile | undefined> {
+  const rows = await database().select(profileSelection).from(users).where(eq(users.clerkId, subject)).limit(1);
   return rows[0];
 }
 
@@ -37,15 +37,15 @@ export function validateProfilePatch(value: unknown): ProfilePatch {
   }
   return row as ProfilePatch;
 }
-export async function patchOwnProfile(subject: string, patch: ProfilePatch) {
-  const [row] = await getDb().update(users).set(patch).where(eq(users.clerkId, subject)).returning(profileSelection);
+export async function patchOwnProfile(subject: string, patch: ProfilePatch, database = getDb) {
+  const [row] = await database().update(users).set(patch).where(eq(users.clerkId, subject)).returning(profileSelection);
   return row;
 }
 const medalSelection = { id: medals.id, title: medals.title, description: medals.description,
   color: medals.color, iconName: medals.iconName, category: medals.category };
-export async function findMedals(subject?: string) {
-  if (subject === undefined) return getDb().select(medalSelection).from(medals).orderBy(medals.id);
-  const rows = await getDb().select({ ...medalSelection, earnedAt: userMedals.earnedAt }).from(userMedals)
+export async function findMedals(subject?: string, database = getDb) {
+  if (subject === undefined) return database().select(medalSelection).from(medals).orderBy(medals.id);
+  const rows = await database().select({ ...medalSelection, earnedAt: userMedals.earnedAt }).from(userMedals)
     .innerJoin(medals, eq(medals.id, userMedals.medalId)).where(eq(userMedals.userId, subject)).orderBy(desc(userMedals.earnedAt));
   return rows.map(row => ({ ...row, earnedAt: row.earnedAt.toISOString() }));
 }

@@ -31,7 +31,7 @@ function uniqueViolation(error: unknown): boolean {
   return false;
 }
 
-export async function syncOwnAccount(subject: string, read = readClerkAccount) {
+export async function syncOwnAccount(subject: string, read = readClerkAccount, database = getDb) {
   const account = await read(subject);
   const primary = account.emailAddresses.find(email => email.id === account.primaryEmailAddressId);
   if (!primary || primary.verification?.status !== 'verified' || !primary.emailAddress || primary.emailAddress.length > 255) {
@@ -43,14 +43,14 @@ export async function syncOwnAccount(subject: string, read = readClerkAccount) {
   const candidates = [preferred, `${preferred}_${suffix}`];
   for (const username of candidates) {
     try {
-      const [row] = await getDb().insert(users).values({
+      const [row] = await database().insert(users).values({
         clerkId: subject, username, email,
         displayName: [account.firstName, account.lastName].filter(Boolean).join(' ') || null,
         avatarUrl: account.imageUrl || null,
       }).onConflictDoUpdate({ target: users.clerkId, set: { email, avatarUrl: account.imageUrl || null } })
         .returning(profileSelection);
       // Sólo catálogo; nunca asignar medallas durante la preparación.
-      await getDb().insert(medals).values(initialMedals).onConflictDoNothing();
+      await database().insert(medals).values(initialMedals).onConflictDoNothing();
       return row;
     } catch (error) {
       if (uniqueViolation(error)) continue;

@@ -1,104 +1,75 @@
 import 'reflect-metadata';
-import { All, Catch, Controller, HttpException, Inject, Injectable, Module, Req, Res } from '@nestjs/common';
-import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
+import { Module, RequestMethod } from '@nestjs/common';
+import type { Provider, Type } from '@nestjs/common';
+import { MODULE_METADATA, PATH_METADATA, METHOD_METADATA } from '@nestjs/common/constants.js';
 import { NestFactory } from '@nestjs/core';
-import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
-import * as routes from './server/routes.ts';
-import { apiHandler, HttpError, preflight } from './server/http.ts';
+import type { NextFunction, Response as ExpressResponse } from 'express';
+import { HealthModule, ProfilesModule, PrayersModule, CommunityModule, StreaksModule, WalletModule } from './nest/modules.ts';
+import { contextHeaders, SafeExceptionFilter } from './nest/http.ts';
+import type { ApiRequest } from './nest/http.ts';
+import { apiHandler, HttpError } from './server/http.ts';
 
-type Handler = (request: Request) => Promise<Response> | Response;
-export type Route = { path: string; methods: Record<string, (request: Request, parameter: string) => Promise<Response> | Response> };
-const context = (id: string) => ({params: Promise.resolve({id})});
-export const defaultRoutes: Route[] = [
-  {path: '/api/health', methods: {GET: routes.health}},
-  {path: '/api/ready', methods: {GET: routes.ready}},
-  {path: '/api/v1/me', methods: {GET: routes.me, PATCH: routes.patchMe}},
-  {path: '/api/v1/me/sync', methods: {POST: routes.sync}},
-  {path: '/api/v1/me/medals', methods: {GET: routes.ownMedals}},
-  {path: '/api/v1/medals', methods: {GET: routes.medals}},
-  {path: '/api/v1/prayers', methods: {GET: routes.prayers, POST: routes.createPrayer}},
-  {path: '/api/v1/prayers/order', methods: {PUT: routes.orderPrayers}},
-  {path: '/api/v1/prayers/:id', methods: {PATCH: (r,id) => routes.patchPrayer(r,context(id)), DELETE: (r,id) => routes.deletePrayer(r,context(id))}},
-  {path: '/api/v1/users/:id/prayers', methods: {GET: (r,id) => routes.userPrayers(r,context(id))}},
-  {path: '/api/v1/community/:operation', methods: {GET: routes.community, POST: routes.community}},
-];
-const safeError = (status: number, code: string, message: string): Handler => apiHandler(() => {throw new HttpError(status, code, message);});
-
-export class HttpService {
-  constructor(readonly endpoints: Route[] = defaultRoutes) {}
-  async dispatch(request: Request): Promise<Response> {
-    const pathname = new URL(request.url).pathname.replace(/\/$/, '') || '/';
-    for (const route of this.endpoints) {
-      const match = new RegExp('^' + route.path.replace(/:[^/]+/g, '([^/]+)') + '$').exec(pathname);
-      if (!match) continue;
-      if (request.method === 'OPTIONS') return preflight(request);
-      const handler = route.methods[request.method === 'HEAD' ? 'GET' : request.method];
-      if (!handler) return safeError(405, 'METHOD_NOT_ALLOWED', 'Método no permitido.')(request);
-      let parameter: string;
-      try { parameter = decodeURIComponent(match[1] ?? ''); }
-      catch { return safeError(400, 'INVALID_PATH', 'Ruta no válida.')(request); }
-      return handler(request, parameter);
-    }
-    return safeError(404, 'NOT_FOUND', 'Ruta no encontrada.')(request);
-  }
-}
-Injectable()(HttpService);
-
-export class ApiController {
-  constructor(readonly service: HttpService) {}
-  async handle(incoming: ExpressRequest, outgoing: ExpressResponse) {
-    // Leave the incoming stream untouched until the authenticated Fetch handler reads it.
-    const headers = new Headers();
-    for (let i = 0; i < incoming.rawHeaders.length; i += 2) headers.append(incoming.rawHeaders[i], incoming.rawHeaders[i+1]);
-    const hasBody = !['GET', 'HEAD'].includes(incoming.method);
-    const iterator = hasBody ? incoming.iterator({destroyOnReturn: false}) : undefined;
-    const body = iterator ? new ReadableStream<Uint8Array>({
-      async pull(controller) {
-        const chunk = await iterator.next();
-        if (chunk.done) controller.close(); else controller.enqueue(chunk.value);
-      },
-      async cancel() { await iterator.return?.(); incoming.resume(); },
-    }, {highWaterMark: 0}) : undefined;
-    const request = new Request(`http://localhost${incoming.originalUrl}`, {
-      method: incoming.method, headers,
-      ...(hasBody ? {body, duplex: 'half'} : {}),
-    } as RequestInit);
-    let response: Response;
-    try { response = await this.service.dispatch(request); }
-    catch { response = await apiHandler(() => {throw new Error();})(request); }
-    outgoing.status(response.status);
-    response.headers.forEach((value, key) => outgoing.setHeader(key, value));
-    if (incoming.method === 'HEAD' || response.status === 204) outgoing.end();
-    else outgoing.end(Buffer.from(await response.arrayBuffer()));
-  }
-}
-Controller()(ApiController);
-Inject(HttpService)(ApiController, undefined, 0);
-All('{*path}')(ApiController.prototype, 'handle', Object.getOwnPropertyDescriptor(ApiController.prototype, 'handle')!);
-Req()(ApiController.prototype, 'handle', 0);
-Res()(ApiController.prototype, 'handle', 1);
-
-class SafeExceptionFilter implements ExceptionFilter {
-  async catch(error: unknown, host: ArgumentsHost) {
-    const incoming = host.switchToHttp().getRequest<ExpressRequest>();
-    const outgoing = host.switchToHttp().getResponse<ExpressResponse>();
-    const invalid = error instanceof URIError || error instanceof HttpException && error.getStatus() === 400;
-    const request = new Request('http://localhost' + incoming.originalUrl, {headers: typeof incoming.headers.origin === 'string' ? {origin: incoming.headers.origin} : {}});
-    const response = await (invalid ? safeError(400, 'INVALID_PATH', 'Ruta no válida.') : apiHandler(() => {throw new Error();}))(request);
-    outgoing.status(response.status);
-    response.headers.forEach((value,key) => outgoing.setHeader(key,value));
-    outgoing.end(await response.text());
-  }
-}
-Catch()(SafeExceptionFilter);
-
+@Module({imports:[HealthModule,ProfilesModule,PrayersModule,CommunityModule,StreaksModule,WalletModule]})
 export class AppModule {}
-Module({controllers: [ApiController], providers: [HttpService]})(AppModule);
-export async function createApplication(endpoints?: Route[]) {
-  const module = endpoints ? class TestModule {} : AppModule;
-  if (endpoints) Module({controllers: [ApiController], providers: [{provide: HttpService, useValue: new HttpService(endpoints)}]})(module);
-  const app = await NestFactory.create(module, {bodyParser: false, logger: false});
-  app.useGlobalFilters(new SafeExceptionFilter());
+export type ProviderOverride = {provide: Type<unknown>; useValue: unknown};
+/** DI overrides replace providers in their owning modules, including shared auth/database. */
+function withOverrides(root: Type<unknown>, overrides: ProviderOverride[], cache = new Map<Type<unknown>,Type<unknown>>()): Type<unknown> {
+  const existing = cache.get(root); if (existing) return existing;
+  class OverriddenModule {}
+  cache.set(root,OverriddenModule);
+  const providers = (Reflect.getMetadata(MODULE_METADATA.PROVIDERS,root) ?? []) as Provider[];
+  const replacements = providers.map(provider => {
+    const token = typeof provider === 'function' ? provider : 'provide' in provider ? provider.provide : provider;
+    return overrides.find(value => value.provide === token) ?? provider;
+  });
+  Module({
+    imports: ((Reflect.getMetadata(MODULE_METADATA.IMPORTS,root) ?? []) as Type<unknown>[]).map(value => withOverrides(value,overrides,cache)),
+    controllers: Reflect.getMetadata(MODULE_METADATA.CONTROLLERS,root) ?? [],
+    providers: replacements,
+    exports: Reflect.getMetadata(MODULE_METADATA.EXPORTS,root) ?? [],
+  })(OverriddenModule);
+  return OverriddenModule;
+}
+export function declaredRoutes(root: Type<unknown> = AppModule): {method: string; path: string}[] {
+  const entries: {method:string;path:string}[] = [];
+  const seen = new Set<Type<unknown>>();
+  const visit = (module: Type<unknown>) => {
+    if (seen.has(module)) return; seen.add(module);
+    for (const controller of (Reflect.getMetadata(MODULE_METADATA.CONTROLLERS,module) ?? []) as Type<unknown>[]) {
+      const prefix = Reflect.getMetadata(PATH_METADATA,controller) ?? '';
+      for (const name of Object.getOwnPropertyNames(controller.prototype)) {
+        const handler = controller.prototype[name];
+        const method = Reflect.getMetadata(METHOD_METADATA,handler);
+        if (method === undefined) continue;
+        const path = '/' + [prefix,Reflect.getMetadata(PATH_METADATA,handler)].filter(Boolean).join('/').replace(/^\/+|\/+$/g,'');
+        entries.push({method:RequestMethod[method],path});
+      }
+    }
+    for (const imported of Reflect.getMetadata(MODULE_METADATA.IMPORTS,module) ?? []) visit(imported);
+  };
+  visit(root); return entries;
+}
+export async function createApplication(overrides: ProviderOverride[] = []) {
+  const app = await NestFactory.create(overrides.length ? withOverrides(AppModule,overrides) : AppModule, {bodyParser:false,logger:false});
+  const declarations = declaredRoutes();
+  const patterns = declarations.map(route => new RegExp('^'+route.path.replace(/:[^/]+/g,'[^/]+')+'/?$'));
+  const knownPath = (path: string) => patterns.some(pattern => pattern.test(path));
+  app.use(async (request: ApiRequest,response: ExpressResponse,next: NextFunction) => {
+    contextHeaders(request,response);
+    if (request.method === 'OPTIONS' && knownPath(request.path)) {response.status(204).end();return;}
+    // Reserved literal paths keep their method policy ahead of parameter routes.
+    const literal = declarations.filter(route => !route.path.includes(':') && route.path === request.path.replace(/\/$/,''));
+    const method = request.method === 'HEAD' ? 'GET' : request.method;
+    if (literal.length && !literal.some(route => route.method === method)) {
+      const failure = await apiHandler(() => {throw new HttpError(405,'METHOD_NOT_ALLOWED','Método no permitido.');})(request.api);
+      response.status(failure.status);
+      failure.headers.forEach((value,key) => response.setHeader(key,value));
+      if (request.method === 'HEAD') response.end(); else response.end(await failure.text());
+      return;
+    }
+    next();
+  });
+  app.useGlobalFilters(new SafeExceptionFilter(knownPath));
   app.getHttpAdapter().getInstance().disable('x-powered-by');
   return app;
 }

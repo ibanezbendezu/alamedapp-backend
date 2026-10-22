@@ -41,25 +41,25 @@ export function visiblePrayers(subject: string, owner: string) {
     ${prayers.audience} = 'friends' and exists(select 1 from follows where follower_id = ${subject} and following_id = ${owner})
     and exists(select 1 from follows where follower_id = ${owner} and following_id = ${subject})))`;
 }
-export function listPrayersQuery(subject: string, owner: string, cursor: number) {
-  return getDb().select().from(prayers).where(and(visiblePrayers(subject, owner), gt(prayers.id, cursor)))
+export function listPrayersQuery(subject: string, owner: string, cursor: number, database = getDb) {
+  return database().select().from(prayers).where(and(visiblePrayers(subject, owner), gt(prayers.id, cursor)))
     .orderBy(asc(prayers.id)).limit(101);
 }
-export async function listPrayers(subject: string, owner: string, cursor: number) {
-  return listPrayersQuery(subject, owner, cursor);
+export async function listPrayers(subject: string, owner: string, cursor: number, database = getDb) {
+  return listPrayersQuery(subject, owner, cursor, database);
 }
-export async function insertPrayer(subject: string, changes: PrayerChanges) {
-  const rows = await getDb().insert(prayers).values({ userId: subject, ...normalizeCreation(changes),
+export async function insertPrayer(subject: string, changes: PrayerChanges, database = getDb) {
+  const rows = await database().insert(prayers).values({ userId: subject, ...normalizeCreation(changes),
     position: sql`(select coalesce(max(position), -1) + 1 from prayers where user_id = ${subject})`,
   }).returning();
   return rows[0];
 }
-export async function patchPrayer(subject: string, id: number, changes: PrayerChanges) {
-  return (await getDb().update(prayers).set({ ...changes, updatedAt: new Date() })
+export async function patchPrayer(subject: string, id: number, changes: PrayerChanges, database = getDb) {
+  return (await database().update(prayers).set({ ...changes, updatedAt: new Date() })
     .where(and(eq(prayers.id, id), eq(prayers.userId, subject))).returning())[0];
 }
-export async function removePrayer(subject: string, id: number) {
-  return (await getDb().delete(prayers).where(and(eq(prayers.id, id), eq(prayers.userId, subject))).returning())[0];
+export async function removePrayer(subject: string, id: number, database = getDb) {
+  return (await database().delete(prayers).where(and(eq(prayers.id, id), eq(prayers.userId, subject))).returning())[0];
 }
 export function orderStatement(subject: string, ids: number[]) {
   // One statement: either the complete owned set matches or no rows are written.
@@ -74,8 +74,8 @@ export function orderStatement(subject: string, ids: number[]) {
       from wanted w, valid where p.id = w.id and p.user_id = ${subject} returning p.id)
     select exists(select 1 from valid) as ok, (select count(*) from changed) as count`;
 }
-export async function orderPrayers(subject: string, ids: number[]) {
-  const result = await getDb().execute(orderStatement(subject, ids));
+export async function orderPrayers(subject: string, ids: number[], database = getDb) {
+  const result = await database().execute(orderStatement(subject, ids));
   return result.rows[0]?.ok === true;
 }
 const repository = { list: listPrayers, insert: createPrayerOnce, patch: patchPrayer, remove: removePrayer, order: orderPrayers };

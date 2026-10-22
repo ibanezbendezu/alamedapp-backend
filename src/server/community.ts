@@ -45,8 +45,6 @@ export function checkResult<T>(value: T): T {
         throw new HttpError(error === 'INVALID_PAIR' ? 400 : error === 'NOT_FOUND' ? 404 : error === 'PIN_LOCKED' ? 429 : error === 'INVALID_PIN' ? 403 : 409, error, error === 'PIN_LOCKED' ? 'Demasiados intentos. Espera 15 minutos.' : error === 'INVALID_PIN' ? 'PIN incorrecto.' : error === 'PIN_REQUIRED' ? 'Crea un PIN nuevo antes de transferir.' : 'No se pudo completar la operación.');
     return value;
 }
-async function rows(query: ReturnType<typeof sql>) { return (await getDb().execute(query)).rows as Row[]; }
-async function result(query: ReturnType<typeof sql>) { return checkResult((await rows(query))[0]?.data); }
 const publicFields = sql `u.clerk_id as "clerkId",u.username,u.display_name as "displayName",u.avatar_url as "avatarUrl",u.bio,u.favorite_verse as "favoriteVerse",u.follower_count as "followerCount",u.following_count as "followingCount",to_char(u.created_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt"`;
 const relationFields = (a: string) => sql `exists(select 1 from follows where follower_id=${a} and following_id=u.clerk_id) as "iFollow",
  exists(select 1 from follows where follower_id=u.clerk_id and following_id=${a}) as "theyFollow",
@@ -57,7 +55,9 @@ const streakFields = sql `s.id,api_streak_count(coalesce(s.last_stoked_at,s.last
  s.is_active as "isActive",to_char(s.last_interaction,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "lastInteraction",to_char(s.last_stoked_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "lastStokedAt",to_char(s.created_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt",
  coalesce(timezone('America/Santiago',s.last_stoked_at at time zone 'UTC')::date=timezone('America/Santiago',clock_timestamp())::date,false) as "isAlreadyStokedToday",
  u.clerk_id as "friendId",u.display_name as "friendName",u.username as "friendUsername",u.avatar_url as "friendAvatar"`;
-export async function communityOperation(a: string, op: string, body: Row, params: URLSearchParams, key: string | null) {
+export async function communityOperation(a: string, op: string, body: Row, params: URLSearchParams, key: string | null, database = getDb) {
+    const rows = async (query: ReturnType<typeof sql>) => (await database().execute(query)).rows as Row[];
+    const result = async (query: ReturnType<typeof sql>) => checkResult((await rows(query))[0]?.data);
     const cursor = params.get('cursor') ?? '';
     const target = params.get('target');
     if (op === 'profile') {
@@ -163,6 +163,12 @@ export async function communityOperation(a: string, op: string, body: Row, param
 }
 const reads = new Set(['profile', 'search', 'notifications', 'streaks', 'streak-detail', 'streak-requests', 'wallet']);
 const fields: Record<string, string[]> = { follow: ['target', 'enabled'], 'notification-read': ['maxId'], 'notification-dismiss': ['id'], 'streak-action': ['action', 'target', 'id'], 'card-color': ['color'], pin: ['pin', 'previousPin'], transfer: ['receiverId', 'amount', 'description', 'pin'] };
+export function communityRouteMethods() {
+    return [
+        ...Array.from(reads, operation => ({ method: 'GET', path: `/api/v1/community/${operation}` })),
+        ...Object.keys(fields).map(operation => ({ method: 'POST', path: `/api/v1/community/${operation}` })),
+    ];
+}
 export function createCommunityHandler(op: string, authenticate = requireSubject, run = communityOperation) {
     return apiHandler(async (request) => {
         const actor = await authenticate(request);
