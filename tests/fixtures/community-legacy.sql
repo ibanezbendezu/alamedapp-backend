@@ -1,0 +1,15 @@
+CREATE TYPE streak_status AS ENUM('pending','accepted','rejected');
+CREATE TYPE transaction_type AS ENUM('in','out');
+CREATE TYPE notification_type AS ENUM('follow','streak_request','streak_accepted','transfer','other');
+CREATE TABLE users(clerk_id varchar(255) PRIMARY KEY,username text UNIQUE NOT NULL,email text UNIQUE NOT NULL,display_name text,avatar_url text,bio text,favorite_verse text,created_at timestamp NOT NULL DEFAULT now(),balance numeric(20,2) NOT NULL DEFAULT 0,security_pin varchar(6) NOT NULL DEFAULT '123456',follower_count integer NOT NULL DEFAULT 0,following_count integer NOT NULL DEFAULT 0,card_color text NOT NULL DEFAULT '#1A1A1A');
+CREATE TABLE follows(follower_id text REFERENCES users(clerk_id),following_id text REFERENCES users(clerk_id),created_at timestamp DEFAULT now(),PRIMARY KEY(follower_id,following_id));
+CREATE TABLE notifications(id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,recipient_id text REFERENCES users(clerk_id),actor_id text REFERENCES users(clerk_id),type notification_type NOT NULL,is_read boolean NOT NULL DEFAULT false,dismissed boolean NOT NULL DEFAULT false,created_at timestamp NOT NULL DEFAULT now());
+CREATE TABLE streak_requests(id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,sender_id text REFERENCES users(clerk_id),receiver_id text REFERENCES users(clerk_id),status streak_status NOT NULL DEFAULT 'pending',created_at timestamp DEFAULT now());
+CREATE TABLE streaks(id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,user_a_id text REFERENCES users(clerk_id),user_b_id text REFERENCES users(clerk_id),count integer NOT NULL DEFAULT 0,last_interaction timestamp NOT NULL DEFAULT now(),last_stoked_at timestamp,user_a_stoke_at timestamp,user_b_stoke_at timestamp,is_active boolean NOT NULL DEFAULT true,created_at timestamp NOT NULL DEFAULT now());
+CREATE TABLE transactions(id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,user_id text REFERENCES users(clerk_id),related_user_id text REFERENCES users(clerk_id),related_user_username text,amount numeric(20,2) NOT NULL,type transaction_type NOT NULL,description text,created_at timestamp NOT NULL DEFAULT now());
+CREATE TABLE medals(id text PRIMARY KEY,title text,description text,color text,icon_name text,category text);
+CREATE TABLE user_medals(user_id text REFERENCES users(clerk_id),medal_id text REFERENCES medals(id),earned_at timestamp NOT NULL DEFAULT now(),PRIMARY KEY(user_id,medal_id));
+CREATE TABLE prayers(id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,user_id text REFERENCES users(clerk_id),content text);
+INSERT INTO users(clerk_id,username,email,balance) VALUES('A','alice','a@fixture.invalid',100.01),('B','bob','b@fixture.invalid',0.02),('C','carol','c@fixture.invalid',0);
+INSERT INTO prayers(user_id,content) VALUES('A','Conservar');
+INSERT INTO transactions(user_id,amount,type,description) VALUES('A',100.01,'in','Legacy');

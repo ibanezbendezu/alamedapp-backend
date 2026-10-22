@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, varchar, decimal, integer, timestamp, boolean, primaryKey, pgEnum, text, check } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, decimal, integer, timestamp, boolean, primaryKey, pgEnum, text, check, uuid, jsonb, uniqueIndex } from 'drizzle-orm/pg-core';
 
 export const streakStatusEnum = pgEnum('streak_status', ['pending', 'accepted', 'rejected']);
 export const transactionTypeEnum = pgEnum('transaction_type', ['in', 'out']);
@@ -11,14 +11,16 @@ export const users = pgTable('users', {
   displayName: varchar('display_name', { length: 255 }),
   avatarUrl: text('avatar_url'),
   balance: decimal('balance', { precision: 20, scale: 2 }).default('0').notNull(),
-  securityPin: varchar('security_pin', { length: 6 }).default('123456').notNull(),
+  pinHash: text('pin_hash'),
+  pinFailures: integer('pin_failures').default(0).notNull(),
+  pinLockedUntil: timestamp('pin_locked_until', {withTimezone:true}),
   followerCount: integer('follower_count').default(0).notNull(),
   followingCount: integer('following_count').default(0).notNull(),
   favoriteVerse: text('favorite_verse'),
   bio: text('bio'),
   cardColor: varchar('card_color', { length: 20 }).default('#1A1A1A').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, t => [check('users_nonnegative_balance', sql`${t.balance} >= 0 and ${t.balance} <> 'NaN'::numeric`)]);
 
 export const medals = pgTable('medals', {
   id: varchar('id', { length: 50 }).primaryKey(),
@@ -64,7 +66,10 @@ export const streakRequests = pgTable('streak_requests', {
   receiverId: varchar('receiver_id', { length: 255 }).references(() => users.clerkId).notNull(),
   status: streakStatusEnum('status').default('pending').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, t=>[
+ check('streak_request_distinct_members',sql`${t.senderId} <> ${t.receiverId}`),
+ uniqueIndex('streak_pending_pair_unique').on(sql`least(${t.senderId},${t.receiverId})`,sql`greatest(${t.senderId},${t.receiverId})`).where(sql`${t.status}='pending'`),
+]);
 
 export const streaks = pgTable('streaks', {
   id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
@@ -77,7 +82,10 @@ export const streaks = pgTable('streaks', {
   userBStokeAt: timestamp('user_b_stoke_at'),
   isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, t=>[
+ check('streak_distinct_members',sql`${t.userAId} <> ${t.userBId}`),
+ uniqueIndex('streak_pair_unique').on(sql`least(${t.userAId},${t.userBId})`,sql`greatest(${t.userAId},${t.userBId})`),
+]);
 
 export const transactions = pgTable('transactions', {
   id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
@@ -88,7 +96,7 @@ export const transactions = pgTable('transactions', {
   type: transactionTypeEnum('type').notNull(),
   description: text('description'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, t=>[check('transactions_positive_amount',sql`${t.amount}>0 and ${t.amount}<>'NaN'::numeric`)]);
 
 export const prayers = pgTable('prayers', {
   audience: varchar('audience', { length: 10 }).$type<'friends' | 'public'>().default('friends').notNull(),
@@ -110,3 +118,8 @@ export const prayerCreationRequests = pgTable('prayer_creation_requests', {
   fingerprint: varchar('fingerprint', { length: 64 }).notNull(),
   prayerId: integer('prayer_id'),
 }, t => [primaryKey({ columns: [t.userId, t.key] })]);
+
+export const transferReceipts = pgTable('transfer_receipts', {
+ actorId:varchar('actor_id',{length:255}).references(()=>users.clerkId).notNull(),
+ key:uuid('key').notNull(), fingerprint:text('fingerprint').notNull(),receipt:jsonb('receipt').notNull(),
+}, t=>[primaryKey({columns:[t.actorId,t.key]})]);
