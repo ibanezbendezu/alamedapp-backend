@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { ProviderOverride } from '../src/app.ts';
+import type { ProviderOverride } from '../src/application.ts';
 
 // Exercise emitted production code with a real HTTP socket, without loading .env.
-const compiled = new URL('../dist/app.js', import.meta.url).href;
+const compiled = new URL('../dist/application.js', import.meta.url).href;
 const { createApplication, declaredRoutes } = await import(compiled);
 const { AuthService } = await import(new URL('../dist/nest/http.js',import.meta.url).href);
 const { ProfilesService, PrayersService, HealthService, CommunityService, StreaksService, WalletService } = await import(new URL('../dist/nest/services.js',import.meta.url).href);

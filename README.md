@@ -1,6 +1,12 @@
 # Alamedapp API
 
-Node 24, NestJS 11, Clerk, Drizzle y Neon HTTP. No Docker ni migraciones al arrancar. El corte de Neon y la rotación de credenciales se completaron el 22 de octubre de 2026; evidencia en `../docs/corte-operativo-neon.md`. La validación en teléfono y el despliegue público siguen pendientes.
+Node 24, NestJS 11, Clerk, Drizzle y Neon HTTP. No Docker ni migraciones al arrancar. El corte de Neon y la rotación de credenciales se completaron el 22 de octubre de 2026; evidencia en `../docs/corte-operativo-neon.md`. API pública: https://alamedapp-backend.vercel.app. La validación funcional en teléfono sigue pendiente.
+
+## Vercel
+
+Proyecto `alamedapp-backend` en `talesprina-team`, desplegado por CLI. Ejecutar `npx vercel deploy --prod --scope talesprina-team` desde esta carpeta para volver a publicar. No hay despliegue automático desde GitHub hasta conectar esa cuenta en Vercel. Los secretos están en variables de producción y `.vercelignore` excluye los `.env` locales.
+
+La entrada es `src/main.ts`: importa directamente NestJS y lanza el bootstrap sin esperar en el nivel superior del módulo, para que Vercel capture el servidor HTTP. La configuración interna está en `src/application.ts`, evitando que sea detectada como una entrada alternativa. `/api/health` confirma el servidor y `/api/ready` ejecuta una lectura de comprobación en Neon.
 
 Desde la raíz del workspace, `.\dev.cmd` inicia ambos proyectos; `.\dev.cmd --phone IP_LAN` prepara Expo Go. Ctrl+C detiene ambos. Consulta `../README.md`.
 
