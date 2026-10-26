@@ -32,6 +32,10 @@ export function apiHandler(handler: (request: Request) => Promise<unknown> | unk
     } catch (error) {
       const known = error instanceof HttpError;
       const status = known ? error.status : 500;
+      if (known && status === 400 && ['INVALID_PRAYER', 'INVALID_PATH'].includes(error.code)) {
+        // Diagnóstico del transporte sin URL, identidad, token ni contenido del diario.
+        console.error(JSON.stringify({ event: 'api_rejection', requestId, status, code: error.code }));
+      }
       if (status >= 500) {
         // Lista cerrada: nunca registrar mensajes, stacks ni datos de la solicitud.
         console.error(JSON.stringify({

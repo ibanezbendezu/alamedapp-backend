@@ -155,3 +155,30 @@ test('legacy community HEAD authenticates before method policy without services 
     assert.equal(databaseCalls,0);
   });
 });
+
+// Reproducción del transporte APK: GET real, cursor explícito e identificador Clerk.
+test('diario compilado conserva owner y cursor con cabeceras okhttp sin debilitar validación', async () => {
+  const actor = 'user_2abcDEF1234567890xyz';
+  const calls: unknown[][] = [];
+  process.env.PRAYERS_API_ENABLED = 'true';
+  try {
+    await serve([
+      {provide: AuthService, useValue: {authenticate: async () => actor}},
+      {provide: PrayersService, useValue: {list: async (...args: unknown[]) => {calls.push(args); return {data: {items: [], nextCursor: null}};}}},
+    ], async base => {
+      for (const cursor of [0, 42, 2147483647]) {
+        const response = await fetch(base+'/api/v1/users/'+actor+'/prayers?cursor='+cursor, {headers: {'user-agent': 'okhttp/4.12.0', authorization: 'Bearer fixture'}});
+        assert.equal(response.status, 200);
+        assert.deepEqual(await response.json(), {data: {items: [], nextCursor: null}});
+        assert.deepEqual(calls.at(-1), [actor, actor, cursor]);
+        assert.equal(response.headers.get('cache-control'), 'no-store');
+      }
+      for (const suffix of ['cursor=-1', 'cursor=1.2', 'cursor=2147483648', 'cursor=x', 'cursor=0&unexpected=true']) {
+        const response = await fetch(base+'/api/v1/users/'+actor+'/prayers?'+suffix);
+        assert.equal(response.status, 400);
+        assert.equal((await response.json()).error.code, 'INVALID_PRAYER');
+      }
+      assert.equal(calls.length, 3);
+    });
+  } finally { delete process.env.PRAYERS_API_ENABLED; }
+});
